@@ -1,0 +1,148 @@
+import { LightningElement, api, track } from 'lwc'; 
+import getDataForBaseObject from '@salesforce/apex/TimelineViewController.getDataForBaseObject';
+import {showToast} from 'c/accniteCommonHelper';
+
+export default class RecordTimelineView extends LightningElement {
+
+    @api childRecord;
+    @api type;
+    @api parentRecord;
+    @api parentId;
+    @api recordData;
+    @track timelineData = {};
+    @track childData ;
+    @track pastData ;
+    @track displayDate = '';
+    @track actionList = [];
+    @track fieldList;
+    @track showFeedbackView = false;
+    @track isFeedbackComponent = false;
+
+    get getactionListLength() {
+        return this.actionList && this.actionList.length>0;
+    }
+
+    connectedCallback(){
+        //this.fieldList = this.childRecord.fieldsToDisplay;
+       
+        this.convertDateToSpecificFormat(this.childRecord.orderingDate, this.childRecord.isDateType);
+        this.actionList = this.childRecord.lstTimelineActions;
+        this.actionList = JSON.parse(JSON.stringify(this.actionList));
+        if(this.actionList && this.childRecord.objectName == 'Feedback_Answer__c') {
+            this.actionList.forEach(eachItem => eachItem.Value = eachItem.Name+';'+this.childRecord.recordData.Slot_Participants__c+';' +eachItem.Component_Name__c);
+        } else if(this.actionList){
+            this.actionList.forEach(eachItem => eachItem.Value = eachItem.Name+';'+this.childRecord.recordData.Id +';' +eachItem.Component_Name__c);
+        }
+        getDataForBaseObject({recordId: this.recordData, parentObjectName : this.parentRecord})  
+        .then(result => {
+            if(result.isSuccess) {
+                console.log('below response');
+                console.log(result.response);
+                this.timelineData = JSON.parse(result.response);
+                this.childData = this.timelineData.lstChildRecordDetails;
+                if(this.childRecord.lablelink == 'Feedback')
+                {
+               //this.isFeedbackComponent = this.childRecord.iconName == 'standard:log_a_call';
+               this.isFeedbackComponent = true;
+                }
+                if(this.childRecord.fieldLabelData.length > 0){
+                    this.fieldList = [];
+                    for(var k=0;k<this.childRecord.fieldLabelData.length;k++){
+                        var fieldMap = {};
+                        fieldMap.label=this.childRecord.fieldLabelData[k].split(':')[0];
+                        fieldMap.apiname=this.childRecord.fieldLabelData[k].split(':')[1];
+                        
+                        this.fieldList.push(fieldMap);                      
+                    }
+                }
+               // this.convertDateToSpecificFormat(this.childRecord.orderingDate);
+                
+            } else {
+                    //showToast('Error', 'error',result.response,this);
+            }
+        })
+        .catch(error => {
+            this.error = error;
+            //showToast('Error', 'error', this.error,this);
+        })
+    }
+
+    convertDateToSpecificFormat(dateInstance, isDateType){ 
+        debugger;
+        if(dateInstance != null && dateInstance != undefined && dateInstance != ''){
+            let dateToDisplay = new Date(dateInstance);
+            var cDate = dateToDisplay.getDate();
+            var cMonth = dateToDisplay.getMonth() + 1;
+            var cYear = dateToDisplay.getFullYear();
+             if(parseInt(cDate) < 10){
+                    cDate = '0'+cDate;
+                }
+                if(parseInt(cMonth) < 10){
+                    cMonth = '0'+cMonth;
+                }
+            if(!isDateType){
+                var cHour = dateToDisplay.getHours(); 
+                var cMin = dateToDisplay.getMinutes();
+                if(parseInt(cMin) < 10){
+                    cMin = '0'+cMin;
+                }
+               
+                if(parseInt(cHour) < 10){
+                    cHour = '0'+cHour;
+                }
+                this.displayDate = cDate + '.' + cMonth + '.' + cYear + ' ' +  cHour + ':' + cMin;
+            }else{
+                this.displayDate = cDate + '.' + cMonth + '.' + cYear;
+            }
+            
+        }
+        
+    }
+
+    handleActionSelect(event) {
+        
+        let parentId;
+        let actionName;
+        let actionValue = event.detail.value;
+        // let splitList = actionValue ? actionValue.split(';') : null;
+        // if(splitList && splitList.length > 1) {
+        //     actionName = splitList[0];
+        //     parentId = splitList[1];
+        // } else if(splitList && splitList.length == 1){
+        //     actionName = splitList[0];
+        // }
+
+        let actiondata  = { actiondata: actionValue};
+        this.fireEvent('handleactions', actiondata);
+        this.showFeedbackView = true;
+    }
+
+    fireEvent(name, eventDetailparameters) {
+        const selectedEvent = new CustomEvent(name, { detail: eventDetailparameters , bubbles:true, composed:true});
+        this.dispatchEvent(selectedEvent);
+    }
+
+    doToggle(event){
+        let targetId = event.target.dataset.id;
+        var acc = this.template.querySelector(`[data-id="${targetId}"]`);
+        let classList = acc.className.split(' ');
+        var panel = this.template.querySelector(`[data-target-id="${targetId}"]`);;
+        
+                if (panel.style.maxHeight) {
+                panel.style.maxHeight = null;
+                } else {
+                panel.style.maxHeight = "100%";
+                } 
+                if(classList.indexOf('active') == -1){
+                    classList.push('active');
+                    acc.className = classList.join(' ');
+                }
+                else{
+                    classList.splice(classList.indexOf('active'),1);
+                    acc.className = classList.join(' ');
+                }
+    }
+
+   
+    
+}
