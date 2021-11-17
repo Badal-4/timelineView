@@ -1,0 +1,176 @@
+<template>
+    <!--lightning-accordion allow-multiple-sections-open
+        active-section-name={childRecord.lablelink}
+       >
+
+        <lightning-accordion-section name={childRecord.lablelink} label={childRecord.lablelink}>
+          <template if:true={getactionListLength} >
+            <lightning-button-menu slot="actions"
+                                    alternative-text="Show menu"
+                                    icon-size="x-small"
+                                    menu-alignment="right"
+                                    onselect={handleActionSelect}>
+                    <template if:true ={actionList} for:each ={actionList} for:item ="action">
+                        <lightning-menu-item key ={action.Id} data-name = "Feedback" value={action.Value} label={action.Name}></lightning-menu-item>
+                    </template>
+              
+                
+              </lightning-button-menu>
+          </template>
+            <div class="slds-grid slds-gutters slds-p-left--large">
+                <div class="slds-col">
+                  <span>{childRecord.belowLabel}</span>
+                </div>
+                <div class="slds-col">
+                  <span>{childRecord.createdBy}</span>
+                </div>
+                <div class="slds-col">
+                  <span>{displayDate}</span>
+                </div>
+            </div>
+            
+            <template if:true ={childData} for:each ={childData} for:item ="eachItem">
+              <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                      record-data ={eachItem.recordData.Id} 
+                                      parent-record ={timelineData.objectName}
+                                      child-record ={eachItem} 
+                                      type = "past">
+              </c-record-timeline-view>
+            </template>
+        </lightning-accordion-section>
+
+    </lightning-accordion-->
+
+    <template if:true={showFeedbackView} >
+        <!--<c-feedback-view-component></c-feedback-view-component> -->
+        <!--<c-star-rating rating-value="four"></c-star-rating>-->
+    </template>
+    <lightning-layout>
+      
+      <lightning-layout-item size="1">
+       <!--<div class="accordion" onclick={doToggle} data-id={childRecord.lablelink} style="padding-top:0px;width:40px;background:white"></div> -->
+      
+      </lightning-layout-item>
+      <lightning-layout-item size="1">
+        
+        <lightning-icon icon-name={childRecord.iconName} alternative-text="task" title=""></lightning-icon>
+        <div class = "vertical"></div><br/>
+      </lightning-layout-item>
+      <lightning-layout-item size="10">
+        <span style="color:#3BD4A2"><b><a onclick={doToggle} data-id={childRecord.lablelink}>{childRecord.lablelink}</a></b></span>
+        
+        <template if:true={getactionListLength} >
+          <div style="float:right">
+            <lightning-button-menu slot="actions"
+                                  alternative-text="Show menu"
+                                  icon-size="x-small"
+                                  menu-alignment="right"
+                                  onselect={handleActionSelect}>
+                  <template if:true ={actionList} for:each ={actionList} for:item ="action">
+                      <lightning-menu-item key ={action.Id} data-name = "Feedback" value={action.Value} label={action.Name}></lightning-menu-item>
+                  </template>
+            
+              
+            </lightning-button-menu>
+          </div>
+        </template>
+        <template if:false={getactionListLength} >
+          <div style="float:right;width:20px;height:20px"></div>
+        </template>
+        <div style="float:right;width:30%">{displayDate}</div>
+        <div style="float:right;width:30%">{childRecord.createdBy}</div>
+        
+        <br/>
+        <c-fielddata-display record-data={childRecord.recordData} field-name={childRecord.belowLabel}> 
+
+        </c-fielddata-display>
+       <br/>
+       <div style="  white-space: nowrap;
+       overflow: hidden;
+       text-overflow: ellipsis;">
+       <c-fielddata-display record-data={childRecord.recordData} field-name={childRecord.previewfield}> 
+      </c-fielddata-display>
+</div>
+       <template if:true={isFeedbackComponent}>
+         <c-star-rating rating-value={childRecord.rating}></c-star-rating>
+       </template>
+     <!-- <template if:false={isFeedbackComponent}>
+         <c-fielddata-display record-data={childRecord.recordData} field-name={childRecord.previewfield}> 
+
+        </c-fielddata-display>
+       </template>-->
+       
+       
+      
+      <br/> 
+        <div class="panel" data-target-id={childRecord.lablelink} style="padding-left:0px;width:100%">
+          <template if:true={fieldList} >
+              <lightning-layout multiple-rows="true" class="slds-box">
+              <template if:true={fieldList} for:each={fieldList} for:item="fieldapi" for:index="index">
+                
+                <lightning-layout-item key={fieldapi.apiname} flexibility="auto">
+                  <label class="slds-form-element__label"> {fieldapi.label}</label><br/>
+                <c-fielddata-display key={fieldapi.apiname} record-data={childRecord.recordData} field-name={fieldapi.apiname}>
+
+                </c-fielddata-display>
+                
+              </lightning-layout-item>
+              </template>
+              <!--<lightning-layout-item>
+                <c-star-rating rating-value="four"></c-star-rating>
+              </lightning-layout-item>-->
+            </lightning-layout><br/>
+          </template>
+            <template if:true ={childData} for:each ={childData} for:item ="eachItem">
+              <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                      record-data ={eachItem.recordData.Id} 
+                                      parent-record ={timelineData.objectName}
+                                      child-record ={eachItem} 
+                                      type = "past">
+              </c-record-timeline-view>
+              
+            </template>
+           
+      </div>
+      </lightning-layout-item>
+    </lightning-layout>
+
+
+    <!--div class="accordion" onclick={doToggle} data-id={childRecord.lablelink}>{childRecord.lablelink}</div>
+    <div class="panel" style="clear: both;">
+      <template if:true={getactionListLength} >
+        <lightning-button-menu slot="actions"
+                                alternative-text="Show menu"
+                                icon-size="x-small"
+                                menu-alignment="right"
+                                onselect={handleActionSelect}>
+                <template if:true ={actionList} for:each ={actionList} for:item ="action">
+                    <lightning-menu-item key ={action.Id} data-name = "Feedback" value={action.Value} label={action.Name}></lightning-menu-item>
+                </template>
+          
+            
+          </lightning-button-menu>
+      </template>
+        <div class="slds-grid slds-gutters slds-p-left--large">
+            <div class="slds-col">
+              <span>{childRecord.belowLabel}</span>
+            </div>
+            <div class="slds-col">
+              <span>{childRecord.createdBy}</span>
+            </div>
+            <div class="slds-col">
+              <span>{displayDate}</span>
+            </div>
+        </div>
+        
+        <template if:true ={childData} for:each ={childData} for:item ="eachItem">
+          <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                  record-data ={eachItem.recordData.Id} 
+                                  parent-record ={timelineData.objectName}
+                                  child-record ={eachItem} 
+                                  type = "past">
+          </c-record-timeline-view>
+        </template>
+  </div-->
+  
+</template>
