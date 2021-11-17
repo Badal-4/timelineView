@@ -1,0 +1,484 @@
+public without sharing class TimelineViewController {
+    
+    public static List<id> contactIds{get;set;}
+    public static user loggedinUser{get;set;}
+    public static set<id> issuerEntityUsers{get;set;}
+
+    @AuraEnabled
+    public static AuraResponse getDataForBaseObject(string recordId,
+                                                    string parentObjectName){
+        AuraResponse AuraResponse;
+        string finalQueryString;
+        RecordDetails RecordDetails = new RecordDetails();
+        list<Timeline_base_object__c> lstOfChildRelationshipNames = new list<Timeline_base_object__c>();
+        list<RecordDetails> lstRecordDetails = new list<RecordDetails>();
+        list<sObject> lstSobject = new list<sObject>();
+        map<string, string> mapOfSequenceVsWhereClause = new map<string, string>();
+        list<string> lstWhereConditions = new list<string>();
+        map<string,string> mapOfObjectNameVsQueryString = new map<string,string>();
+        list<Timeline_base_object__c> lstTimeLineObject = new list<Timeline_base_object__c>();
+        contactIds = new list<id>();
+        string loggedInUserId = UserInfo.getUserId();
+        loggedinUser = [select id,contactId,Contact.accountid,TimeZoneOffset__c from user where id=:userinfo.getuserid() LIMIT 1];
+        issuerEntityUsers = new set<id>();
+        for(user u : [select id from user where Contact.accountid = :loggedinUser.Contact.accountid]){
+            issuerEntityUsers.add(u.id);
+        }
+        
+        try {
+            if(recordId!=null) {
+                string objectName =  Id.valueOf(recordId).getSObjectType().getDescribe().getName();
+                if(String.isNotBlank(objectName)) {
+                    if(objectName == 'Account'){
+                        for(contact con : [select id from contact where accountid=:recordId and recordtype.developername = 'Guest_User']){
+                            contactIds.add(con.id);
+                        }
+                    }
+                    //start grand child
+                    list<RecordDetails> childData = new list<RecordDetails>();
+                    childData = fetchGrandChild(objectName, recordId, loggedInUserId);
+                    if(childData.size() > 0)lstRecordDetails.addall(childData);
+                    //end grand child
+                    
+                    lstTimeLineObject = fetchDataForBaseObject(objectName, 
+                                                                parentObjectName);
+
+                    if(!lstTimeLineObject.isEmpty()) {
+                            for(Timeline_base_object__c eachTimeLineBaseObject : lstTimeLineObject) {
+                                if(!eachTimeLineBaseObject.Timeline_Where_Conditions__r.isEmpty()) {
+                                    fetchWhereConditionMap(eachTimeLineBaseObject,
+                                                         mapOfSequenceVsWhereClause,
+                                                         recordId,
+                                                         loggedInUserId);
+                                }
+                                
+                                if(String.isNotBlank(eachTimeLineBaseObject.Where_Condition__c)) {
+                                    lstWhereConditions = (eachTimeLineBaseObject.Where_Condition__c).split(' ');
+                                }
+                                string whereClause = '';
+                                string queryString = 'SELECT ';
+                                string fieldsToQuery = String.isNotBlank(eachTimeLineBaseObject.Fields_To_Query__c) &&
+                                                         (eachTimeLineBaseObject.Fields_To_Query__c).contains(eachTimeLineBaseObject.Timeline_date__c) ?
+                                                         eachTimeLineBaseObject.Fields_To_Query__c : eachTimeLineBaseObject.Fields_To_Query__c +', '+eachTimeLineBaseObject.Timeline_date__c;
+                                queryString+=   String.isNotBlank(fieldsToQuery) ? 
+                                                fieldsToQuery + ' FROM ':
+                                                        'Id FROM ';
+                                queryString += eachTimeLineBaseObject.Relationship_Name__c;
+
+                                lstOfChildRelationshipNames.add(eachTimeLineBaseObject);
+                                if(!lstWhereConditions.isEmpty()) {
+                                    whereClause += !mapOfSequenceVsWhereClause.isEmpty() ? ' WHERE ' : '';
+                                    for(string eachCondition : lstWhereConditions) {
+                                        if((!mapOfSequenceVsWhereClause.isEmpty()) && 
+                                            mapOfSequenceVsWhereClause.containskey(eachCondition)) {
+                                                whereClause += mapOfSequenceVsWhereClause.get(eachCondition);
+                                            } else if(!mapOfSequenceVsWhereClause.isEmpty()) {
+                                                whereClause +=' '+eachCondition + ' '; 
+                                            }
+                                    }
+                                }
+
+                                queryString += whereClause;
+                                mapOfObjectNameVsQueryString.put(eachTimeLineBaseObject.Base_Object__c, 
+                                                                    queryString);
+
+
+                            }
+                            
+                            if(!mapOfObjectNameVsQueryString.isEmpty()) {
+                                finalQueryString = 'SELECT '; 
+                                finalQueryString += (lstTimeLineObject[0].Timeline_Parent_Object__r.Fields_To_Query__c!=null)?
+                                                        lstTimeLineObject[0].Timeline_Parent_Object__r.Fields_To_Query__c :
+                                                        'Id';
+                                
+                                for(string objectNameForMap : mapOfObjectNameVsQueryString.keyset()) {
+                                    finalQueryString += ',(' + mapOfObjectNameVsQueryString.get(objectNameForMap) + ')';
+                                }
+
+                                finalQueryString+= ' FROM ' + lstTimeLineObject[0].Timeline_Parent_Object__r.Base_Object__c  + ' WHERE Id =:recordId';
+                                system.debug('finalQueryString : ' + finalQueryString);
+                            }
+
+                            lstSobject = Database.query(finalQueryString);
+                            if(!lstSobject.isEmpty() && !lstOfChildRelationshipNames.isEmpty()) {
+                                for(Timeline_base_object__c eachTimelineChild : lstOfChildRelationshipNames) {
+                                    if((lstSobject[0].getSobjects(eachTimelineChild.Relationship_Name__c))!=null && 
+                                        !(lstSobject[0].getSobjects(eachTimelineChild.Relationship_Name__c)).isEmpty()) {
+                                        for(sObject eachChildObject : (lstSobject[0].getSobjects(eachTimelineChild.Relationship_Name__c))) {
+                                            RecordDetails RecordDetailsForEachChild = new RecordDetails();
+                                            RecordDetailsForEachChild.objectName = string.valueOf(eachTimelineChild.get('Base_Object__c'));
+                                            RecordDetailsForEachChild.recordData = eachChildObject;
+                                            RecordDetailsForEachChild.iconName = eachTimelineChild.Icon_Name__c;
+                                            RecordDetailsForEachChild.isDateType = eachTimelineChild.isDateType__c;
+                                            RecordDetailsForEachChild.iconStyle = eachTimelineChild.Icon_bottom_Line_Style__c; 
+                                            list<string> fieldsToDisplayinbox1 = new list<string>();
+                                            if(!string.isblank(eachTimelineChild.Fields_In_Detail__c))fieldsToDisplayinbox1.addall(eachTimelineChild.Fields_In_Detail__c.split(','));
+                                            RecordDetailsForEachChild.fieldsToDisplay = fieldsToDisplayinbox1;
+                                            list<string> fieldslabelToDisplayinbox1 = new list<string>();
+                                            if(!string.isblank(eachTimelineChild.Label_Corresponding_to_detail_fields__c))fieldslabelToDisplayinbox1.addall(eachTimelineChild.Label_Corresponding_to_detail_fields__c.split(','));
+                                            RecordDetailsForEachChild.fieldLabelData = !fieldslabelToDisplayinbox1.isEmpty() ?  fieldslabelToDisplayinbox1 : null;
+                                            
+                                            if(eachTimelineChild.get('Timeline_date__c') == 'Slot_start_time__c'){
+                                                RecordDetailsForEachChild.orderingDate = AccniteUtility.getConvertedDateTime(Integer.valueOf(loggedInUser.TimeZoneOffset__c),String.valueOf(eachChildObject.get(string.valueOf(eachTimelineChild.get('Timeline_date__c')))));
+                                            }else{
+                                                //RecordDetailsForEachChild.orderingDate = Date.valueOf(eachChildObject.get(string.valueOf(eachTimelineChild.get('Timeline_date__c'))));
+                                                RecordDetailsForEachChild.orderingDate = AccniteUtility.getConvertedDateTime(Integer.valueOf(loggedInUser.TimeZoneOffset__c),string.valueof(eachChildObject.get(string.valueOf(eachTimelineChild.get('Timeline_date__c')))));//TODO: make this dynamic.
+                                            }
+                                            RecordDetailsForEachChild.hasChildNode = Integer.valueOf(eachTimelineChild.get('Number_of_child_Objects__c')) > 0 ? true : false;
+                                            RecordDetailsForEachChild.lablelink = String.valueOf(eachTimelineChild.get('Display_Label__c'));//TODO: make this dynamic.
+                                            if(eachTimelineChild.Display_User_Field__c == 'CreatedByUser'){
+                                                RecordDetailsForEachChild.createdBy = String.valueOf(eachChildObject.getSobject('CreatedBy').get('Name'));
+                                            }
+                                            else{
+                                            RecordDetailsForEachChild.createdBy = String.valueOf(eachChildObject.get(eachTimelineChild.Display_User_Field__c));
+                                            }
+                                            //RecordDetailsForEachChild.belowLabel = String.valueOf(eachChildObject.get(string.valueOf(eachTimelineChild.get('Field_To_display_Record_Name__c'))));//TODO: make this dynamic.
+                                            RecordDetailsForEachChild.lstTimelineActions = eachTimelineChild.getSobjects('Timeline_actions__r');//TODO: make this dynamic.
+                                            RecordDetailsForEachChild.belowLabel = string.valueOf(eachTimelineChild.get('Field_To_display_Record_Name__c'));
+                                            RecordDetailsForEachChild.previewfield = string.valueOf(eachTimelineChild.get('Preview__c'));
+                                            lstRecordDetails.add(RecordDetailsForEachChild);
+                                        }
+                                        
+
+                                    } else {
+                                            AuraResponse = new AuraResponse(false, 'Error', 'No Child records found!');
+
+                                    }
+                                }
+                            } else {
+                                AuraResponse = new AuraResponse(false, 'Error', 'No Child records found!');
+                            }
+                        } else {
+                            AuraResponse = new AuraResponse(false, 'Error', 'Time line not configured!'); 
+                        }
+                        
+                        lstRecordDetails.sort();
+                        
+                        RecordDetails.lstChildRecordDetails = lstRecordDetails;
+                        RecordDetails.objectName = objectName;
+                        system.debug(JSON.serialize(RecordDetails));
+                        AuraResponse = new AuraResponse(true, 'SUCCESS', JSON.serialize(RecordDetails));
+                        
+                    } else {
+                        AuraResponse = new AuraResponse(false, 'Error', 'Object not found!'); 
+                    }
+                } else {
+                    AuraResponse = new AuraResponse(false, 'Error', 'Record Id not found!');
+                }
+        
+        } catch (Exception ex) {
+                AuraResponse = new AuraResponse(false, 'Error', ex.getMessage() +' - ' +ex.getStackTraceString());
+         }
+            
+            return AuraResponse;
+    }
+
+    /* This method is used to fetch the Where condition.
+    --------------------------------------------------------------------------------------
+    Version#     Date                           Author                    Description
+    --------------------------------------------------------------------------------------
+    1.0          21-06-2021                   Sanjeet Mahajan              Initial Version
+    --------------------------------------------------------------------------------------
+    */ 
+
+    private static void fetchWhereConditionMap(Timeline_base_object__c eachTimeLineBaseObject,
+                                                map<string, string> mapOfSequenceVsWhereClause,
+                                                string recordId,
+                                                string loggedInUserId) {
+        //string whereClauseString = 'WHERE ';
+        for(Timeline_Where_Condition__c eachTimelineWhereConditions : (eachTimeLineBaseObject.Timeline_Where_Conditions__r)) {
+            string whereClauseString = '';
+            string conditionData = '';
+            string fieldValue = eachTimelineWhereConditions.Field_Value__c.equalsIgnoreCase('{recordId}') ?  recordId: 
+                                        eachTimelineWhereConditions.Field_Value__c.equalsIgnoreCase('{loggedInUserId}') ? loggedInUserId :
+                                        eachTimelineWhereConditions.Field_Value__c;
+            
+            if(eachTimelineWhereConditions.Field_Value__c.equalsIgnoreCase('{loggedInUser.contact.accountId}')){
+                fieldValue = loggedinUser.contact.accountId;
+            }
+            else if(eachTimelineWhereConditions.Field_Value__c.equalsIgnoreCase('{loggedInUser.contactId}')){
+                fieldValue = loggedinUser.contactId;
+            }
+            
+            switch on eachTimelineWhereConditions.Operator__c {
+                when 'equals' {   
+                    system.debug('inside equals');
+                    conditionData = '=';
+                    whereClauseString+=  eachTimelineWhereConditions.Field_Name__c + '=' + 
+                            eachTimelineWhereConditions.Field_Type__c=='String' ? '\"'+eachTimelineWhereConditions.Field_Value__c + '\"':
+                            fieldValue;
+                }
+                when 'not equals' {
+                    system.debug('inside not equals');
+                    conditionData = '!=';
+                    whereClauseString+= eachTimelineWhereConditions.Field_Name__c + '!=' + 
+                            eachTimelineWhereConditions.Field_Type__c=='String' ? '\"'+eachTimelineWhereConditions.Field_Value__c + '\"':
+                            fieldValue;
+                }
+                when else {  
+                    system.debug('inside else');
+                    whereClauseString+='';
+                }
+            }
+            if(eachTimelineWhereConditions.Field_Type__c=='String')whereClauseString = '\''+whereClauseString+'\'';
+            whereClauseString = eachTimelineWhereConditions.Field_Name__c+conditionData+whereClauseString;
+            system.debug('whereClauseString --> '+whereClauseString);
+            mapOfSequenceVsWhereClause.put(string.valueOf(eachTimelineWhereConditions.Sequence_Number__c), 
+                                            whereClauseString);
+        }
+    }
+
+    /* This method is used to get the where clause.
+    --------------------------------------------------------------------------------------
+    Version#     Date                           Author                    Description
+    --------------------------------------------------------------------------------------
+    1.0          22-06-2021                   Sanjeet Mahajan              Initial Version
+    --------------------------------------------------------------------------------------
+    */ 
+
+    // private static string switchCaseForWhereClause(string operator) {
+    //     switch on  {
+    //         when 'equals' {      
+    //             whereClauseString+=  eachTimelineWhereConditions.Field_Name__c + '=' + 
+    //                     eachTimelineWhereConditions.Field_Type__c=='String' ? '\"'+eachTimelineWhereConditions.Field_Value__c + '\"':
+    //                     fieldValue;
+    //         }
+    //         when 'not equals' {          
+    //             whereClauseString+= eachTimelineWhereConditions.Field_Name__c + '!=' + 
+    //                     eachTimelineWhereConditions.Field_Type__c=='String' ? '\"'+eachTimelineWhereConditions.Field_Value__c + '\"':
+    //                     fieldValue;
+    //         }
+    //         when else {    
+    //             '';
+    //         }
+    //     }
+    // }
+
+    /* This method is used to query MetaData from timeline base object.
+    --------------------------------------------------------------------------------------
+    Version#     Date                           Author                    Description
+    --------------------------------------------------------------------------------------
+    1.0          21-06-2021                   Sanjeet Mahajan              Initial Version
+    --------------------------------------------------------------------------------------
+    */ 
+
+    private static list<Timeline_base_object__c> fetchDataForBaseObject(string objectName,
+                                                                        string parentObjectName){
+        if(String.isNotBlank(parentObjectName)) {
+            return [SELECT Base_Object__c,
+                            Fields_To_Query__c,
+                            Preview__c,
+                            Number_of_child_Objects__c,
+                            Timeline_Parent_Object__c,
+                            Relationship_Name__c,
+                            isDateType__c,
+                            Timeline_date__c,Label_Corresponding_to_detail_fields__c,
+                            Display_Label__c,Icon_Name__c,Icon_bottom_Line_Style__c,Fields_In_Detail__c,
+                            Field_To_display_Record_Name__c,Display_User_Field__c,
+                            Timeline_Parent_Object__r.Where_Condition__c,
+                            Timeline_Parent_Object__r.Fields_To_Query__c,
+                            Timeline_Parent_Object__r.Base_Object__c,
+                            (SELECT Name,
+                                    Component_Name__c
+                                    FROM Timeline_actions__r ORDER BY
+                                    Sequence_no__c
+                            ),
+                            (SELECT Field_Name__c,
+                                    Field_Type__c,
+                                    Field_Value__c,
+                                    Operator__c,
+                                    Sequence_Number__c
+                                    FROM Timeline_Where_Conditions__r), 
+                            Where_Condition__c FROM Timeline_base_object__c
+                            WHERE Timeline_Parent_Object__r.Base_Object__c = :objectName AND
+                            Timeline_Parent_Object__c != null AND
+                            Timeline_Parent_Object__r.Timeline_Parent_Object__r.Base_Object__c = : parentObjectName  and Is_Direct_Child__c=true];
+        } else {
+            return [SELECT Base_Object__c,
+                                    Fields_To_Query__c,
+                                    Preview__c,
+                                    Number_of_child_Objects__c,
+                                    Timeline_Parent_Object__c,
+                                    Relationship_Name__c,
+                                    isDateType__c,
+                                    Field_To_display_Record_Name__c,
+                                    Timeline_date__c,Icon_Name__c,Icon_bottom_Line_Style__c,Fields_In_Detail__c,
+                                    Display_Label__c,Label_Corresponding_to_detail_fields__c,
+                                    Timeline_Parent_Object__r.Where_Condition__c,Display_User_Field__c,
+                                    Timeline_Parent_Object__r.Fields_To_Query__c,
+                                    Timeline_Parent_Object__r.Base_Object__c,
+                                    (SELECT Name,
+                                            Component_Name__c
+                                            FROM Timeline_actions__r ORDER BY
+                                            Sequence_no__c
+                                    ),
+                                    (SELECT Field_Name__c,
+                                            Field_Type__c,
+                                            Field_Value__c,
+                                            Operator__c,
+                                            Sequence_Number__c
+                                            FROM Timeline_Where_Conditions__r), 
+                                    Where_Condition__c FROM Timeline_base_object__c
+                                    WHERE Timeline_Parent_Object__r.Base_Object__c = :objectName AND
+                                    Timeline_Parent_Object__c != null  and Is_Direct_Child__c=true];
+        }
+        
+    }
+    
+    @TestVisible
+    private static list<RecordDetails> fetchGrandChild(string objectName, string recordid, string loggedInUserId){
+        list<RecordDetails> childRecordList = new list<RecordDetails>();
+        list<sObject> recordList = new list<sObject>();
+        list<string> fieldsToDisplayinbox;
+        List<Feedback_Answer__c> feedbackAnswerList = [Select Id, Slot_Participants__c, Event__c, Event__r.Event_Name__c, Slot_Participants__r.Participant__r.Account.Name,
+                                        Feedback_Question__r.Mode_Of_Answer__c, Feedback_Question__r.Question_Detail__c, 
+                 	                    Answer_Detail__c  
+                	             FROM Feedback_Answer__c order by Createddate];
+        Map<Id,Feedback_Answer__c> slotParticipantIdToFeedbackAnswerMap = new Map<Id,Feedback_Answer__c>();
+        for(Feedback_Answer__c feedback : feedbackAnswerList){
+            if(!slotParticipantIdToFeedbackAnswerMap.containsKey(feedback.Slot_Participants__c)){
+                if(feedback.Feedback_Question__r.Question_Detail__c	== 'Rate overall experience of meeting'){
+                    slotParticipantIdToFeedbackAnswerMap.put(feedback.Slot_Participants__c, feedback);
+                }
+            }
+        }
+        
+        for(Timeline_base_object__c timelineREc : [select Base_Object__c, Fields_To_Query__c,Preview__c,
+                                    Number_of_child_Objects__c,
+                                    Timeline_Parent_Object__c,
+                                    Relationship_Name__c,
+                                    isDateType__c,
+                                    Field_To_display_Record_Name__c,Display_User_Field__c,
+                                    Timeline_date__c,Label_Corresponding_to_detail_fields__c,
+                                    Display_Label__c,Icon_Name__c,Icon_bottom_Line_Style__c,Fields_In_Detail__c,
+                                    Timeline_Parent_Object__r.Where_Condition__c,
+                                    Timeline_Parent_Object__r.Fields_To_Query__c,
+                                    Timeline_Parent_Object__r.Base_Object__c,
+                                    (SELECT Name,
+                                            Component_Name__c
+                                            FROM Timeline_actions__r ORDER BY
+                                            Sequence_no__c
+                                    ),
+                                    (SELECT Field_Name__c,
+                                            Field_Type__c,
+                                            Field_Value__c,
+                                            Operator__c,
+                                            Sequence_Number__c
+                                            FROM Timeline_Where_Conditions__r), 
+                                    Where_Condition__c FROM Timeline_base_object__c
+                                    WHERE Timeline_Parent_Object__r.Base_Object__c = :objectName and Is_Direct_Child__c=false]){
+                                        string query = 'SELECT '+timelineREc.Fields_To_Query__c+' from '+timelineREc.Base_Object__c;
+                                        if(timelineREc.Timeline_Where_Conditions__r != null && timelineREc.Timeline_Where_Conditions__r.size() > 0){
+                                            map<string,string> whereClauseMap = new map<string,string>();
+                                            fetchWhereConditionMap(timelineREc,
+                                                         whereClauseMap,
+                                                         recordid,
+                                                         loggedInUserId);
+                                            system.debug('where clause map --> '+whereClauseMap);
+                                            if(whereClauseMap.size() > 0){
+                                                List<string> whereClauseList = new list<string>();
+                                                whereClauseList.addall(timelineREc.Where_Condition__c.split(' '));
+                                                for(integer i=0;i<whereClauseList.size();i++){
+                                                    try{
+                                                        integer j = Integer.valueof(whereClauseList[i].trim());
+                                                        whereClauseList[i] = whereClauseMap.get(whereClauseList[i]);                                                    
+                                                    }
+                                                catch(exception ex){
+                                                    System.debug('not an integer');
+                                                }
+                                                }
+                                                system.debug('whereClauseList --> '+whereClauseList);
+                                                query = query+' WHERE '+string.join(whereClauseList,' ');
+                                            }
+                                            
+                                        }
+                                        
+                                        system.debug('query check --> '+query);
+                                        
+                                        for(sObject objData : database.query(query)){
+                                            RecordDetails RecordDetailsForEachChild = new RecordDetails();
+                                            fieldsToDisplayinbox = new list<string>();
+                                            RecordDetailsForEachChild.objectName = string.valueOf(timelineREc.get('Base_Object__c'));
+                                            RecordDetailsForEachChild.recordData = objData;
+                                            RecordDetailsForEachChild.iconName = timelineREc.Icon_Name__c;
+                                            //RecordDetailsForEachChild.previewfield = string.valueOf(timelineREc.get('Preview__c'));
+                                            RecordDetailsForEachChild.previewfield = timelineREc.Preview__c;
+                                            RecordDetailsForEachChild.isDateType = timelineREc.isDateType__c;
+                                            RecordDetailsForEachChild.iconStyle = timelineREc.Icon_bottom_Line_Style__c;
+                                            if(!string.isblank(timelineREc.Fields_In_Detail__c))fieldsToDisplayinbox.addall(timelineREc.Fields_In_Detail__c.split(','));
+                                            RecordDetailsForEachChild.fieldsToDisplay = fieldsToDisplayinbox;
+                                            list<string> fieldslabelToDisplayinbox = new list<string>();
+                                            if(!string.isblank(timelineREc.Label_Corresponding_to_detail_fields__c))fieldslabelToDisplayinbox.addall(timelineREc.Label_Corresponding_to_detail_fields__c.split(','));
+                                            RecordDetailsForEachChild.fieldLabelData = fieldslabelToDisplayinbox;
+                                            if(timelineREc.get('Timeline_date__c') == 'Slot_start_time__c'){
+                                                RecordDetailsForEachChild.orderingDate = AccniteUtility.getConvertedDateTime(Integer.valueOf(loggedInUser.TimeZoneOffset__c),String.valueOf(objData.get(string.valueOf(timelineREc.get('Timeline_date__c')))));
+                                            }else{
+                                                //RecordDetailsForEachChild.orderingDate = Date.valueOf(objData.get(string.valueOf(timelineREc.get('Timeline_date__c'))));
+                                                RecordDetailsForEachChild.orderingDate = AccniteUtility.getConvertedDateTime(Integer.valueOf(loggedInUser.TimeZoneOffset__c),string.valueof(objData.get(string.valueOf(timelineREc.get('Timeline_date__c')))));//TODO: make this dynamic.
+                                            }
+                                            //RecordDetailsForEachChild.orderingDate = Date.valueOf(objData.get(string.valueOf(timelineREc.get('Timeline_date__c')))); //TODO: make this dynamic.
+                                            RecordDetailsForEachChild.hasChildNode = Integer.valueOf(timelineREc.get('Number_of_child_Objects__c')) > 0 ? true : false;
+                                            RecordDetailsForEachChild.lablelink = String.valueOf(timelineREc.get('Display_Label__c'));//TODO: make this dynamic.
+                                            if(timelineREc.Display_User_Field__c == 'CreatedByUser'){
+                                                RecordDetailsForEachChild.createdBy = String.valueOf(objData.getSobject('CreatedBy').get('Name'));
+                                            }
+                                            else{
+                                                RecordDetailsForEachChild.createdBy = String.valueOf(objData.get(timelineREc.Display_User_Field__c));
+                                            }
+                                           // RecordDetailsForEachChild.createdBy = String.valueOf(objData.get(timelineREc.Display_User_Field__c));
+                                            //RecordDetailsForEachChild.createdBy = String.valueOf(objData.getSobject(timelineREc.Display_User_Field__c).get('Name'));//TODO: make this dynamic.
+                                            //RecordDetailsForEachChild.belowLabel = String.valueOf(objData.get(string.valueOf(timelineREc.get('Field_To_display_Record_Name__c'))));//TODO: make this dynamic.
+                                            RecordDetailsForEachChild.lstTimelineActions = timelineREc.getSobjects('Timeline_actions__r');
+                                            RecordDetailsForEachChild.belowLabel = string.valueOf(timelineREc.get('Field_To_display_Record_Name__c'));
+                                            
+                                            Feedback_Answer__c answer = slotParticipantIdToFeedbackAnswerMap.get(RecordDetailsForEachChild.recordData.Id);
+                                            if(answer != null)
+                                            {
+                                            String rating = answer.Answer_Detail__c;
+                                                                                       
+                                            RecordDetailsForEachChild.rating = rating;
+                                            }
+                                            
+                                            childRecordList.add(RecordDetailsForEachChild);
+                                        }
+                                    }
+                                    return childRecordList;
+    }
+
+    
+    public class RecordDetails implements comparable{
+        
+        public string objectName{get;set;}
+        public sobject recordData{get;set;}
+        public DateTime orderingDate{get;set;}
+        public boolean hasChildNode{get;set;}
+        public string lablelink;
+        public string createdBy;
+        public string iconName;
+        public string iconStyle;
+        public string belowLabel;
+        public boolean isDateType;
+        public string previewfield;
+        public String rating;
+        public list<string> fieldsToDisplay{get;set;}
+        public list<string> fieldLabelData{get;set;}
+        public list<Timeline_action__c> lstTimelineActions;
+        public list<RecordDetails> lstChildRecordDetails = new list<RecordDetails>();
+      
+        public Integer compareTo(object objToCompare) {
+            RecordDetails RecordDetails = (RecordDetails)objToCompare;
+            if (orderingDate == RecordDetails.orderingDate){
+                return 0;
+            }
+            else if (orderingDate > RecordDetails.orderingDate){
+                return -1;
+            }
+            else{
+                return 1;        
+            }
+        }
+    }
+
+
+    
+}
