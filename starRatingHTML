@@ -1,0 +1,9 @@
+<template>
+    <div  class="col-sm-12 mt-2" > 
+        <i class="fa fa-star fa-lg unchecked" data-record="1" data-id="one" ></i>  
+        <i class="fa fa-star fa-lg unchecked" data-record="2" data-id="two" ></i>
+        <i class="fa fa-star fa-lg unchecked" data-record="3" data-id="three"></i>
+        <i class="fa fa-star fa-lg unchecked" data-record="4" data-id="four"></i>
+        <i class="fa fa-star fa-lg unchecked" data-record="5" data-id="five"></i>
+    </div>
+</template>
