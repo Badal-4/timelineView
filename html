@@ -1,0 +1,131 @@
+<template>
+    <!--lightning-accordion allow-multiple-sections-open
+                         active-section-name="Upcoming">
+
+        <lightning-accordion-section name="Upcoming" label="Upcoming and Overdue">
+            <template if:true={futureData}>
+                <template for:each ={futureData} for:item ="eachItem">
+                    <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                            record-data ={eachItem.recordData.Id} 
+                                            parent-record ={timelineData.objectName} 
+                                            child-record ={eachItem} 
+                                            type = "future">
+                    </c-record-timeline-view>
+                </template>
+            </template>
+        </lightning-accordion-section>
+
+        <lightning-accordion-section name="Past" label="Past Activities"-->
+            <!--template if:true={pastData}>
+                <template for:each ={pastData} for:item ="eachItem">
+                    <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                            record-data ={eachItem.recordData.Id} 
+                                            parent-record ={timelineData.objectName} 
+                                            child-record ={eachItem} 
+                                            type = "past">
+                        </c-record-timeline-view>
+                </template>
+            </template-->
+        <!--/lightning-accordion-section>
+    </lightning-accordion-->
+    <div style = "text-align: end;">
+        <a class="breadcrumb-item" onclick={openFilters}>
+            <lightning-icon class = "iconclass" size="small" icon-name="utility:filterList" alternative-text="Approved" title="Approved"></lightning-icon>
+        </a>
+    </div>
+    <lightning-layout class="">
+        <lightning-layout-item size="1">
+            <div class="accordion" onclick={doToggle} data-id="Upcoming" style="padding-top:0px;width:40px;background:white"></div>
+        </lightning-layout-item>
+        
+        <lightning-layout-item size="10">
+            <h4><b>Upcoming and Overdue</b></h4> 
+        </lightning-layout-item>
+    </lightning-layout>
+    <div class="panel" data-target-id="Upcoming">
+        <template if:true={futureData}>
+            <template for:each ={futureData} for:item ="eachItem">
+                <div key={eachItem.recordData.Id}><c-record-timeline-view key ={eachItem.recordData.Id} 
+                                        record-data ={eachItem.recordData.Id} 
+                                        parent-record ={timelineData.objectName} 
+                                        child-record ={eachItem} 
+                                        type = "future">
+                </c-record-timeline-view><br/><br/></div>
+            </template>
+        </template>
+        <template if:false={isFuture}>
+            <br/><div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;No future activities to display.</div><br/>
+        </template>
+        <br/><br/><br/><br/>
+    </div><br/>
+
+
+    <lightning-layout>
+        <lightning-layout-item size="1">
+            <div class="accordion" onclick={doToggle} data-id="testSection" style="padding-top:0px;width:40px;display:inline-flex;background:white"></div>
+        </lightning-layout-item>
+        
+        <lightning-layout-item>
+            <h4><b>Past Activities</b></h4>
+            
+        </lightning-layout-item>
+    </lightning-layout>
+    <div class="panel" data-target-id="testSection">
+        <template if:true={pastData}>
+            <template for:each ={pastData} for:item ="eachItem">
+               <div key={eachItem.recordData.Id}> <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                        record-data ={eachItem.recordData.Id} 
+                                        parent-record ={timelineData.objectName} 
+                                        child-record ={eachItem} 
+                                        type = "past">
+                    </c-record-timeline-view><br key={eachItem.recordData.Id}/></div>
+            </template>
+        </template>
+        <template if:false={isPast}>
+            <div>No past activities to display.</div><br/>
+        </template>
+        <br/><br/><br/><br/>
+    </div>
+
+    <!--div class="accordion" onclick={doToggle} data-id="testSection" style="width:40px;display:inline-flex;background:white"></div>Past Activities
+    <div class="panel" data-target-id="testSection">
+        <template if:true={pastData}>
+            <template for:each ={pastData} for:item ="eachItem">
+                <c-record-timeline-view key ={eachItem.recordData.Id} 
+                                        record-data ={eachItem.recordData.Id} 
+                                        parent-record ={timelineData.objectName} 
+                                        child-record ={eachItem} 
+                                        type = "past">
+                    </c-record-timeline-view>
+            </template>
+        </template>
+    </div-->
+
+    <template if:true ={showFilterModal}>
+        <div class="modals add-user-modal on-board-process-form">
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open user-approval-modal">
+                <div class="slds-modal__container activation-link-popup">
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse"
+                                title="Close" >
+                            <!--<lightning:icon iconName="utility:close" alternativeText="Close" />-->
+                            <span class="slds-assistive-text">Close</span>
+                        </button>
+                        <span class = "filterHeading slds-align_absolute-center">Filter</span>
+                        <div>
+                            <div>
+                                <lightning-input type="date" onchange ={setFromValue} name="From" value ={filterfrom} label="From" ></lightning-input>
+                            </div>
+                            <div>   
+                                <lightning-input type="date" onchange ={setToValue} name="To" label="To" value ={filterto} ></lightning-input>
+                            </div>
+                        </div>
+                        <button class="slds-button slds-button_outline-brand slds-m-top--large slds-float--right" onclick={hideModal} >Cancel</button>
+                        <button class="slds-button slds-button_brand slds-m-top--large slds-float--right slds-m-right--x-small" onclick={applyFilter} >Apply</button>
+                    </div>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </div>
+    </template>
+</template>
